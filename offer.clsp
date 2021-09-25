@@ -1,0 +1,54 @@
+(mod (
+        SELLER_PUBKEY
+        SELLER_PUZZLE_HASH
+        TRANSACTION_MOD_HASH
+        T_AND_C
+        deposit
+        price
+        op
+        buyer_pubkey
+    )
+
+    (include condition_codes.clib)
+    (include sha256tree1.clib)
+    (include curry-and-treehash.clib)
+
+    (defun-inline exit (SELLER_PUBKEY SELLER_PUZZLE_HASH amount)
+        (list
+            (list CREATE_COIN SELLER_PUZZLE_HASH amount)
+            (list AGG_SIG_ME SELLER_PUBKEY "COVERED MARKET")
+        )
+    )
+
+    (defun-inline transaction_puzzle_hash (MOD_HASH seller_puzzle_hash_hash buyer_pubkey_hash deposit_hash price_hash)
+        (puzzle-hash-of-curried-function
+            MOD_HASH
+            price_hash
+            deposit_hash
+            buyer_pubkey_hash
+            seller_puzzle_hash_hash
+        )
+    )
+
+    (defun-inline take_offer (TRANSACTION_MOD_HASH SELLER_PUZZLE_HASH deposit price buyer_pubkey)
+        (list
+            (list CREATE_COIN 
+                (transaction_puzzle_hash TRANSACTION_MOD_HASH (sha256tree1 SELLER_PUZZLE_HASH) (sha256tree1 buyer_pubkey) (sha256tree1 deposit) (sha256tree1 price))
+                (+ deposit price)
+            )
+            (list CREATE_COIN_ANNOUNCEMENT buyer_pubkey)
+            (list CREATE_COIN_ANNOUNCEMENT T_AND_C)
+        )
+    )
+
+    ; main
+    ; opcode 0 cancels the offer and returns the deposit to the seller
+    ; opcode 1 means the offer is taken by buyer
+    (if (= op 0)
+        (exit SELLER_PUBKEY SELLER_PUZZLE_HASH deposit)
+        (if (= op 1)
+            (take_offer TRANSACTION_MOD_HASH SELLER_PUZZLE_HASH deposit price buyer_pubkey)
+            (x)
+        )
+    )
+)
